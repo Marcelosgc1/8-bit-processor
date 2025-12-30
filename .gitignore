@@ -1,0 +1,11 @@
+*.bak
+src/db/
+src/incremental_db/
+
+src/output_files/*
+!src/output_files/soc_system.sof
+src/simulation
+src/greybox_tmp
+c5_pin_model_dump.txt
+*.vwf
+*.qws
