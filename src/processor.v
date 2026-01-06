@@ -6,7 +6,8 @@ module processor(
 	output reg [7:0] access_address,
 	output [7:0] data_write,
 	output reg [3:0] byte_enable,
-	output reg write_enable
+	output reg write_enable,
+	output reg [63:0] debug_reg
 );
 
 
@@ -36,6 +37,15 @@ module processor(
 	//X6 -	LR; 			LINK REGISTER; SALVA ENDEREÇO DE ONDE A FUNCAO FOI CHAMADA;
 	//X7 -	SP;			STACK POINTER; SALVA O ENDEREÇO DE TOP NA STACK DA MEMORIA DE DADOS;
 	
+	/* OBSERVAÇOES
+	
+			OBS 1: Para instruçoes de branch, o PC vai estar +8 em relaçao ao endereço da instrucao de branch;
+		Exemplo: Se a instruçao de branch esta no endereço 0x20, e voce quer pular para 0x30, voce
+		deve considerar o endereço 0x28, entao no assembly deve estar escrito `B 0x08`, ao inves de
+		`B 0x10`, ja que 0x28 + 0x08 = 0x30;
+	
+	
+	*/
 	
 	reg [7:0] REGISTRADORES [7:0];
 	initial REGISTRADORES[7] = 8'hff;
@@ -63,6 +73,11 @@ module processor(
 	
 	
 	always @(*) begin
+		//FOR DEBUG
+		for (i = 0; i < 8; i = i + 1) begin
+			debug_reg[i+:8] = REGISTRADORES[i];
+		end
+	
 		program_counter = REGISTRADORES[1];
 	
 		OPCODE_F = FETCH_PIPE[18:14];
@@ -103,19 +118,21 @@ module processor(
 	
 	integer i;
 	
-	always @(posedge clk or posedge reset) begin
-		if (reset) begin
-			REGISTRADORES[1] <= 0;
-			for (i = 0; i < 8; i = i + 1) begin
+	always @(posedge clk or negedge reset) begin
+		if (!reset) begin
+			for (i = 0; i < 7; i = i + 1) begin
 				 REGISTRADORES[i] <= 0;
 			end
+			REGISTRADORES[7] <= 8'hff;
 			FETCH_PIPE <= 0;
 			EXE_PIPE <= 0;
-			EXE_RES <= 0;	
+			EXE_RES <= 0;
+			ZERO_FLAG <= 0;
 			MEM_PIPE <= 0;
 			MEM_RES <= 0;
 			R_data <= 0;
 			W_data <= 0;
+			byte_enable <= 0;
 		end
 		else begin 
 			
@@ -130,14 +147,6 @@ module processor(
 			if (MEMORY_HAZARD) FETCH_PIPE <= FETCH_PIPE;
 			else if (BRANCH) FETCH_PIPE <= 0;
 			else FETCH_PIPE <= instruction_code[18:0];
-			
-			//DECODE
-	//		DEC_PIPE <= FETCH_PIPE;
-	//		OPERATOR_1 <= 	REGISTRADORES[FETCH_PIPE[10:8]];
-	//		OPERATOR_2 <= 	(OPCODE_F == ADD | OPCODE_F == SUB) ? REGISTRADORES[FETCH_PIPE[2:0]] :
-	//							(OPCODE_F == BEQ) ? REGISTRADORES[FETCH_PIPE[13:11]] :
-	//							FETCH_PIPE[7:0];
-		
 			
 			//EXECUTE
 			if (BRANCH) EXE_PIPE <= 0;
@@ -190,8 +199,8 @@ module processor(
 		end
 	end
 	
-	always @(negedge clk or posedge reset) begin
-		if (reset) begin
+	always @(negedge clk or negedge reset) begin
+		if (!reset) begin
 			DEC_PIPE <= 0;
 			OPERATOR_1 <= 0;
 			OPERATOR_2 <= 0;

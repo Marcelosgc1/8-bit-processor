@@ -1,5 +1,6 @@
 module main(
-	input clk
+	input clk, reset,
+	output [63:0] debug_register
 );
 
 	wire [3:0] be;
@@ -28,14 +29,15 @@ module main(
 	
 	processor my_processor (
 		.clk (clk),
-		.reset (1'b1),
+		.reset (reset),
 		.instruction_code (ic),
 		.data_read (dr),
 		.program_counter (pc),
 		.access_address (ra),
 		.data_write (dw),
 		.byte_enable (be),
-		.write_enable (we)
+		.write_enable (we),
+		.debug_reg(debug_register)
 	);
 
 
