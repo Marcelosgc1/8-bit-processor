@@ -51,23 +51,33 @@ module processor(
 	initial REGISTRADORES[7] = 8'hff;
 	
 	reg [18:0] FETCH_PIPE;
-	reg BRANCH;
+	reg [2:0]  ALU_CODE;
+	reg BRANCH, UNC_BRANCH, COND_BRANCH, FUNC_RETURN, BR_LINK, CMP_CODE;
+	reg F_STR_OP, F_LOAD_OP;
 	
-	reg [18:0] DEC_PIPE;
+	reg [13:0] DEC_PIPE;
 	reg [7:0]  OPERATOR_1, OPERATOR_2;
-
-	reg [18:0] EXE_PIPE;
+	reg [2:0]  D_ALU_CODE;
+	reg D_UNC_BRANCH, D_COND_BRANCH, D_FUNC_RETURN, D_CMP_CODE;
+	reg D_STR_OP, D_LOAD_OP;
+	
+	reg [13:0] EXE_PIPE;
 	reg [7:0] EXE_RES;
 	wire [7:0] ALU_RES;
 	wire ZERO_S;
 	reg ZERO_FLAG;
-	
-	reg [18:0] MEM_PIPE;
+	reg E_UNC_BRANCH, E_COND_BRANCH, E_FUNC_RETURN;
+	reg E_STR_OP, E_LOAD_OP;
+
+	reg [13:0] MEM_PIPE;
 	reg [7:0] MEM_RES;
 	reg [7:0] R_data;
 	reg [7:0] W_data;
+	reg M_LOAD_OP;
 	
-	reg MEMORY_HAZARD, F_RTYPE, D_RTYPE, E_RTYPE, M_RTYPE, F_ITYPE, D_ITYPE, E_ITYPE, M_ITYPE, MREG_WRITE, EREG_WRITE, ALU_WRITE;
+	reg MEMORY_HAZARD, F_RTYPE, D_RTYPE, E_RTYPE, M_RTYPE, F_ITYPE, D_ITYPE, E_ITYPE, M_ITYPE, MREG_WRITE, EREG_WRITE, FREG_WRITE, DREG_WRITE, 
+	F_ALU_WRITE, D_ALU_WRITE, E_ALU_WRITE, M_ALU_WRITE, MEM_WRITE;
+	
 	reg [7:0] ALU_OP1, ALU_OP2;
 	reg [4:0] OPCODE_F, OPCODE_D, OPCODE_E, OPCODE_M;
 	
@@ -82,41 +92,99 @@ module processor(
 		debug_reg[62] = (E_ITYPE);
 		debug_reg[63] = (M_ITYPE);
 	
+		
+		//flags
 		program_counter = REGISTRADORES[1];
+		access_address = EXE_RES;
 	
 		OPCODE_F = FETCH_PIPE[18:14];
-		OPCODE_D = DEC_PIPE[18:14];
-		OPCODE_E = EXE_PIPE[18:14];
-		OPCODE_M = MEM_PIPE[18:14];
+
 		
-		access_address = EXE_RES;
+		FUNC_RETURN = (OPCODE_F == BX);
+		BR_LINK     = (OPCODE_F == BL)
+		UNC_BRANCH 	= (OPCODE_F == B | FUNC_RETURN | BR_LINK);
+		COND_BRANCH = (OPCODE_F == BEQ);
+		CMP_CODE    = (OPCODE_F == CMP);
 		
-		BRANCH = (OPCODE_E == B | (OPCODE_E == BEQ & ZERO_FLAG) | OPCODE_E == BX | OPCODE_E == BL);
+		
+		
+		case (OPCODE_F)
+			BEQ: begin
+				ALU_CODE = 3'd001;
+			end
+			B: begin
+				ALU_CODE = 3'd001;
+			end
+			BL: begin
+				ALU_CODE = 3'd001;
+			end
+			CMP: begin
+				ALU_CODE = 3'd010;
+			end
+			ADD: begin
+				ALU_CODE = 3'd001;
+			end
+			SUB: begin
+				ALU_CODE = 3'd010;
+			end
+			LOAD: begin
+				ALU_CODE = 3'd001;
+			end
+			STR: begin
+				ALU_CODE = 3'd001;
+			end
+			ADDI: begin
+				ALU_CODE = 3'd001;
+			end
+			AND: begin
+				ALU_CODE = 3'd011;
+			end
+			ANDI: begin
+				ALU_CODE = 3'd011;
+			end
+			ORR: begin
+				ALU_CODE = 3'd100;
+			end
+			ORRI: begin
+				ALU_CODE = 3'd100;
+			end
+			LSL: begin
+				ALU_CODE = 3'd101;
+			end
+			LSR: begin
+				ALU_CODE = 3'd110;
+			end
+			default: result = 0;
+		endcase
+
+		
+		
+		
+		BRANCH = (E_UNC_BRANCH | (E_COND_BRANCH & ZERO_FLAG));
+		
+		
 		
 		F_RTYPE = OPCODE_F == ADD | OPCODE_F == SUB | OPCODE_F == AND | OPCODE_F == ORR;
-		D_RTYPE = OPCODE_D == ADD | OPCODE_D == SUB | OPCODE_D == AND | OPCODE_D == ORR;
-		E_RTYPE = OPCODE_E == ADD | OPCODE_E == SUB | OPCODE_E == AND | OPCODE_E == ORR;
-		M_RTYPE = OPCODE_M == ADD | OPCODE_M == SUB | OPCODE_M == AND | OPCODE_M == ORR;
-		
 		F_ITYPE = OPCODE_F == ADDI | OPCODE_F == ANDI | OPCODE_F == ORRI | OPCODE_F == LSL | OPCODE_F == LSR;
-		D_ITYPE = OPCODE_D == ADDI | OPCODE_D == ANDI | OPCODE_D == ORRI | OPCODE_D == LSL | OPCODE_D == LSR;
-		E_ITYPE = OPCODE_E == ADDI | OPCODE_E == ANDI | OPCODE_E == ORRI | OPCODE_E == LSL | OPCODE_E == LSR;
-		M_ITYPE = OPCODE_M == ADDI | OPCODE_M == ANDI | OPCODE_M == ORRI | OPCODE_M == LSL | OPCODE_M == LSR;
 		
-		MEMORY_HAZARD = 	(OPCODE_D == LOAD) & 
+		F_STR_OP  = OPCODE_F == STR;
+		F_LOAD_OP = OPCODE_F == LOAD;
+		
+	
+		MEMORY_HAZARD = 	(D_LOAD_OP) & 
 								(FETCH_PIPE[10:8] == DEC_PIPE[13:11] | (FETCH_PIPE[10:8] == DEC_PIPE[2:0] & F_RTYPE));
 		
-		MREG_WRITE = OPCODE_M == LOAD | ALU_WRITE;
-		EREG_WRITE = OPCODE_E == LOAD | E_RTYPE | E_ITYPE;
-		ALU_WRITE  = M_RTYPE | M_ITYPE;
+		
+		F_ALU_WRITE = F_RTYPE | F_ITYPE;
+		FREG_WRITE = F_LOAD_OP | F_ALU_WRITE;
 		
 		
 		if (DEC_PIPE[10:8] == EXE_PIPE[13:11] & |EXE_PIPE[13:11] & EREG_WRITE) ALU_OP1 = EXE_RES;
-		else if (DEC_PIPE[10:8] == MEM_PIPE[13:11] & |EXE_PIPE[13:11] & EREG_WRITE) ALU_OP1 = MEM_RES;
+		else if (DEC_PIPE[10:8] == MEM_PIPE[13:11] & |EXE_PIPE[13:11] & MREG_WRITE) ALU_OP1 = MEM_RES;
 		else ALU_OP1 = OPERATOR_1;
 		
 		if (DEC_PIPE[2:0] == EXE_PIPE[13:11] & |EXE_PIPE[13:11] & EREG_WRITE & D_RTYPE) ALU_OP2 = EXE_RES;
-		else if (DEC_PIPE[2:0] == MEM_PIPE[13:11] & |EXE_PIPE[13:11] & EREG_WRITE & D_RTYPE) ALU_OP2 = MEM_RES;
+		else if (DEC_PIPE[2:0] == MEM_PIPE[13:11] & |EXE_PIPE[13:11] & MREG_WRITE & D_RTYPE) ALU_OP2 = MEM_RES;
 		else ALU_OP2 = OPERATOR_2;
 	end
 	
@@ -143,35 +211,63 @@ module processor(
 		end
 		else begin 
 			//DEBUG
-			if (OPCODE_F==ADDI) debug_reg[64] <= 1;
+			if (OPCODE_F == ADDI) debug_reg[64] <= 1;
 			
 			
 			//FETCH
-			if (OPCODE_E == BX) REGISTRADORES[1] <= REGISTRADORES[EXE_PIPE[2:0]];
+			if (E_FUNC_RETURN) REGISTRADORES[1] <= REGISTRADORES[EXE_PIPE[2:0]];
 			else if (BRANCH) REGISTRADORES[1] <= EXE_RES[7:0];
 			else if (MEMORY_HAZARD) REGISTRADORES[1] <= REGISTRADORES[1];
 			else REGISTRADORES[1] <= REGISTRADORES[1] + 8'd4;
 			
-			if (OPCODE_F == BL) REGISTRADORES[6] <= REGISTRADORES[1];
+			if (BR_LINK) REGISTRADORES[6] <= REGISTRADORES[1];
 			
 			if (MEMORY_HAZARD) FETCH_PIPE <= FETCH_PIPE;
 			else if (BRANCH) FETCH_PIPE <= 0;
 			else FETCH_PIPE <= instruction_code[18:0];
 			
 			//EXECUTE
-			if (BRANCH) EXE_PIPE <= 0;
-			else EXE_PIPE <= DEC_PIPE;
+			if (BRANCH) begin 
+				EXE_PIPE <= 0;
+				E_RTYPE <= 0;
+				E_ITYPE <= 0;
+				E_STR_OP <= 0;
+				E_LOAD_OP <= 0;
+				EREG_WRITE <= 0;
+				E_ALU_WRITE <= 0;
+				E_UNC_BRANCH <= 0;
+				E_COND_BRANCH <= 0; 
+				E_FUNC_RETURN <= 0;
+				E_CMP_CODE <= 0;
+			end else begin 
+				EXE_PIPE <= DEC_PIPE;
+				E_RTYPE <= D_RTYPE;
+				E_ITYPE <= D_ITYPE;
+				E_STR_OP <= D_STR_OP;
+				E_LOAD_OP <= D_LOAD_OP;
+				EREG_WRITE <= DREG_WRITE;
+				E_ALU_WRITE <= D_ALU_WRITE;
+				E_UNC_BRANCH <= D_UNC_BRANCH;
+				E_COND_BRANCH <= D_COND_BRANCH; 
+				E_FUNC_RETURN <= D_FUNC_RETURN;
+				E_CMP_CODE <= D_CMP_CODE;
+			end
 			
 			EXE_RES <= ALU_RES;
 			
-			if (D_RTYPE | D_ITYPE | CMP) ZERO_FLAG <= ZERO_S;
+			if (D_RTYPE | D_ITYPE | D_CMP_CODE) ZERO_FLAG <= ZERO_S;
 			
 			
 			//MEMORY
 			MEM_PIPE <= EXE_PIPE;
 			MEM_RES <= EXE_RES;
+			M_RTYPE <= E_RTYPE;
+			M_ITYPE <= E_ITYPE;
+			M_LOAD_OP <= E_LOAD_OP;
+			MREG_WRITE <= EREG_WRITE;
+			M_ALU_WRITE <= E_ALU_WRITE;
 			
-			write_enable <= (OPCODE_E == STR);
+			write_enable <= E_STR_OP;
 			W_data <= REGISTRADORES[EXE_PIPE[13:11]];
 			
 			case (EXE_PIPE[1:0])
@@ -194,15 +290,15 @@ module processor(
 				default: begin
 					R_data <= R_data;
 					byte_enable <= 0;
-				end
+				endD_ITYPE
 			endcase
 			
 			//WRITE-BACK
 			if (|MEM_PIPE[13:11]) begin
-				if (OPCODE_M == LOAD) begin
+				if (M_LOAD_OP) begin
 					REGISTRADORES[MEM_PIPE[13:11]] <= R_data;		
 				end 
-				else if (ALU_WRITE) begin
+				else if (M_ALU_WRITE) begin
 					REGISTRADORES[MEM_PIPE[13:11]] <= MEM_RES;
 				end
 			end
@@ -214,20 +310,67 @@ module processor(
 			DEC_PIPE <= 0;
 			OPERATOR_1 <= 0;
 			OPERATOR_2 <= 0;
+			D_RTYPE <= 0;
+			D_ITYPE <= 0;
+			D_STR_OP <= 0;
+			D_LOAD_OP <= 0;
+			DREG_WRITE <= 0;
+			D_ALU_WRITE <= 0;
+			D_UNC_BRANCH <= 0;
+			D_COND_BRANCH <= 0; 
+			D_FUNC_RETURN <= 0;
+			D_CMP_CODE <= 0;
+			D_ALU_CODE <= 0;
 		end
 		else if (BRANCH) begin
 			DEC_PIPE <= 0;
 			OPERATOR_1 <= 0;
 			OPERATOR_2 <= 0;
+			D_RTYPE <= 0;
+			D_ITYPE <= 0;
+			D_STR_OP <= 0;
+			D_LOAD_OP <= 0;
+			DREG_WRITE <= 0;
+			D_ALU_WRITE <= 0;
+			D_UNC_BRANCH <= 0;
+			D_COND_BRANCH <= 0; 
+			D_FUNC_RETURN <= 0;
+			D_CMP_CODE <= 0;
+			D_ALU_CODE <= 0;
 		end else begin
 			//DECODE
-			if (MEMORY_HAZARD) DEC_PIPE <= 0;
-			else DEC_PIPE <= FETCH_PIPE;
+			if (MEMORY_HAZARD) begin
+				DEC_PIPE <= 0;
+				D_RTYPE <= 0;
+				D_ITYPE <= 0;
+				D_STR_OP <= 0;
+				D_LOAD_OP <= 0;
+				DREG_WRITE <= 0;
+				D_ALU_WRITE <= 0;
+				D_UNC_BRANCH <= 0;
+				D_COND_BRANCH <= 0; 
+				D_FUNC_RETURN <= 0;
+				D_CMP_CODE <= 0;
+				D_ALU_CODE <= 0;
+			end else begin
+				DEC_PIPE <= FETCH_PIPE[13:0];
+				D_RTYPE <= F_RTYPE;
+				D_ITYPE <= F_ITYPE;
+				D_STR_OP <= F_STR_OP;
+				D_LOAD_OP <= F_LOAD_OP;
+				DREG_WRITE <= FREG_WRITE;
+				D_ALU_WRITE <= F_ALU_WRITE;
+				D_UNC_BRANCH <= UNC_BRANCH;
+				D_COND_BRANCH <= COND_BRANCH; 
+				D_FUNC_RETURN <= FUNC_RETURN;
+				D_CMP_CODE <= CMP_CODE;
+				D_ALU_CODE <= ALU_CODE;
+			end
 			
 			OPERATOR_1 <= 	(BRANCH) ? REGISTRADORES[1] :
 								REGISTRADORES[FETCH_PIPE[10:8]];
 			OPERATOR_2 <= 	(F_RTYPE) ? REGISTRADORES[FETCH_PIPE[2:0]] :
-								(OPCODE_F == CMP) ? REGISTRADORES[FETCH_PIPE[13:11]] :
+								(CMP_CODE) ? REGISTRADORES[FETCH_PIPE[13:11]] :
 								FETCH_PIPE[7:0];
 		end
 	end
@@ -236,7 +379,7 @@ module processor(
 	ALU(
 		.op1(ALU_OP1),
 		.op2(ALU_OP2),
-		.operation(OPCODE_D),
+		.operation(D_ALU_CODE),
 		.is_signed(D_RTYPE | D_ITYPE),
 		.result(ALU_RES),
 		.ZERO(ZERO_S)	
