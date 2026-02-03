@@ -79,7 +79,7 @@ module processor(
 	F_ALU_WRITE, D_ALU_WRITE, E_ALU_WRITE, M_ALU_WRITE, MEM_WRITE;
 	
 	reg [7:0] ALU_OP1, ALU_OP2;
-	reg [4:0] OPCODE_F, OPCODE_D, OPCODE_E, OPCODE_M;
+	reg [4:0] OPCODE_F;
 	
 	
 	always @(*) begin	
@@ -96,12 +96,15 @@ module processor(
 		//flags
 		program_counter = REGISTRADORES[1];
 		access_address = EXE_RES;
+		write_enable = E_STR_OP;
+		W_data = REGISTRADORES[EXE_PIPE[13:11]];
+			
 	
 		OPCODE_F = FETCH_PIPE[18:14];
 
 		
 		FUNC_RETURN = (OPCODE_F == BX);
-		BR_LINK     = (OPCODE_F == BL)
+		BR_LINK     = (OPCODE_F == BL);
 		UNC_BRANCH 	= (OPCODE_F == B | FUNC_RETURN | BR_LINK);
 		COND_BRANCH = (OPCODE_F == BEQ);
 		CMP_CODE    = (OPCODE_F == CMP);
@@ -154,7 +157,7 @@ module processor(
 			LSR: begin
 				ALU_CODE = 3'd110;
 			end
-			default: result = 0;
+			default: ALU_CODE = 0;
 		endcase
 
 		
@@ -164,19 +167,20 @@ module processor(
 		
 		
 		
-		F_RTYPE = OPCODE_F == ADD | OPCODE_F == SUB | OPCODE_F == AND | OPCODE_F == ORR;
-		F_ITYPE = OPCODE_F == ADDI | OPCODE_F == ANDI | OPCODE_F == ORRI | OPCODE_F == LSL | OPCODE_F == LSR;
+		F_RTYPE = (OPCODE_F == ADD | OPCODE_F == SUB | OPCODE_F == AND | OPCODE_F == ORR);
+		F_ITYPE = (OPCODE_F == ADDI | OPCODE_F == ANDI | OPCODE_F == ORRI | OPCODE_F == LSL | OPCODE_F == LSR);
 		
-		F_STR_OP  = OPCODE_F == STR;
-		F_LOAD_OP = OPCODE_F == LOAD;
+		F_STR_OP  = (OPCODE_F == STR);
+		F_LOAD_OP = (OPCODE_F == LOAD);
 		
 	
 		MEMORY_HAZARD = 	(D_LOAD_OP) & 
 								(FETCH_PIPE[10:8] == DEC_PIPE[13:11] | (FETCH_PIPE[10:8] == DEC_PIPE[2:0] & F_RTYPE));
 		
 		
-		F_ALU_WRITE = F_RTYPE | F_ITYPE;
-		FREG_WRITE = F_LOAD_OP | F_ALU_WRITE;
+		F_ALU_WRITE = (F_RTYPE | F_ITYPE);
+		FREG_WRITE  = (F_LOAD_OP | F_ALU_WRITE);
+		
 		
 		
 		if (DEC_PIPE[10:8] == EXE_PIPE[13:11] & |EXE_PIPE[13:11] & EREG_WRITE) ALU_OP1 = EXE_RES;
@@ -205,6 +209,24 @@ module processor(
 			R_data <= 0;
 			W_data <= 0;
 			byte_enable <= 0;
+			E_RTYPE <= 0;
+			E_ITYPE <= 0;
+			E_STR_OP <= 0;
+			E_LOAD_OP <= 0;
+			EREG_WRITE <= 0;
+			E_ALU_WRITE <= 0;
+			E_UNC_BRANCH <= 0;
+			E_COND_BRANCH <= 0; 
+			E_FUNC_RETURN <= 0;
+			MEM_PIPE <= 0;
+			MEM_RES <= 0;
+			M_RTYPE <= 0;
+			M_ITYPE <= 0;
+			M_LOAD_OP <= 0;
+			MREG_WRITE <= 0;
+			M_ALU_WRITE <= 0;
+			
+			
 			
 			//DEBUG
 			debug_reg[64] <= 0;
@@ -238,7 +260,6 @@ module processor(
 				E_UNC_BRANCH <= 0;
 				E_COND_BRANCH <= 0; 
 				E_FUNC_RETURN <= 0;
-				E_CMP_CODE <= 0;
 			end else begin 
 				EXE_PIPE <= DEC_PIPE;
 				E_RTYPE <= D_RTYPE;
@@ -250,7 +271,6 @@ module processor(
 				E_UNC_BRANCH <= D_UNC_BRANCH;
 				E_COND_BRANCH <= D_COND_BRANCH; 
 				E_FUNC_RETURN <= D_FUNC_RETURN;
-				E_CMP_CODE <= D_CMP_CODE;
 			end
 			
 			EXE_RES <= ALU_RES;
@@ -267,8 +287,8 @@ module processor(
 			MREG_WRITE <= EREG_WRITE;
 			M_ALU_WRITE <= E_ALU_WRITE;
 			
-			write_enable <= E_STR_OP;
-			W_data <= REGISTRADORES[EXE_PIPE[13:11]];
+//			write_enable <= E_STR_OP;
+//			W_data <= REGISTRADORES[EXE_PIPE[13:11]];
 			
 			case (EXE_PIPE[1:0])
 				0:	begin 
@@ -290,7 +310,7 @@ module processor(
 				default: begin
 					R_data <= R_data;
 					byte_enable <= 0;
-				endD_ITYPE
+				end
 			endcase
 			
 			//WRITE-BACK
@@ -304,6 +324,13 @@ module processor(
 			end
 		end
 	end
+	
+	
+	
+	
+	
+	
+	
 	
 	always @(negedge clk or negedge reset) begin
 		if (!reset) begin
