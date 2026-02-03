@@ -7,26 +7,26 @@ module processor(
 	output [7:0] data_write,
 	output reg [3:0] byte_enable,
 	output reg write_enable,
-	output reg [63:0] debug_reg
+	output reg [64:0] debug_reg
 );
 
 
-	localparam 	NOP 	= 5'd00000,
-					B 		= 5'd00001,
-					BEQ 	= 5'd00010,
-					ADD 	= 5'd00011,
-					SUB 	= 5'd00100,
-					LOAD 	= 5'd00101,
-					STR 	= 5'd00110,
-					ADDI 	= 5'd00111,
-					BX		= 5'd01000,
-					BL		= 5'd01001,
-					AND	= 5'd01010,
-					ORR	= 5'd01011,
-					ANDI	= 5'd01100,
-					ORRI	= 5'd01101,
-					LSL	= 5'd01110,
-					LSR	= 5'd01111,
+	localparam 	NOP 	= 5'b00000,
+					B 		= 5'b00001,
+					BEQ 	= 5'b00010,
+					ADD 	= 5'b00011,
+					SUB 	= 5'b00100,
+					LOAD 	= 5'b00101,
+					STR 	= 5'b00110,
+					ADDI 	= 5'b00111,
+					BX		= 5'b01000,
+					BL		= 5'b01001,
+					AND	= 5'b01010,
+					ORR	= 5'b01011,
+					ANDI	= 5'b01100,
+					ORRI	= 5'b01101,
+					LSL	= 5'b01110,
+					LSR	= 5'b01111,
 					CMP	= 5'b10000
 					;
 
@@ -69,14 +69,18 @@ module processor(
 	
 	reg MEMORY_HAZARD, F_RTYPE, D_RTYPE, E_RTYPE, M_RTYPE, F_ITYPE, D_ITYPE, E_ITYPE, M_ITYPE, MREG_WRITE, EREG_WRITE, ALU_WRITE;
 	reg [7:0] ALU_OP1, ALU_OP2;
-	reg [3:0] OPCODE_F, OPCODE_D, OPCODE_E, OPCODE_M;
+	reg [4:0] OPCODE_F, OPCODE_D, OPCODE_E, OPCODE_M;
 	
 	
-	always @(*) begin
-		//FOR DEBUG
-		for (i = 0; i < 8; i = i + 1) begin
-			debug_reg[i+:8] = REGISTRADORES[i];
-		end
+	always @(*) begin	
+		//DEBUG
+		debug_reg[0+:8] = REGISTRADORES[1];
+		debug_reg[8+:8] = REGISTRADORES[2];
+		debug_reg[16+:5] = FETCH_PIPE[18:14];
+		debug_reg[60] = (F_ITYPE);
+		debug_reg[61] = (D_ITYPE);
+		debug_reg[62] = (E_ITYPE);
+		debug_reg[63] = (M_ITYPE);
 	
 		program_counter = REGISTRADORES[1];
 	
@@ -133,8 +137,14 @@ module processor(
 			R_data <= 0;
 			W_data <= 0;
 			byte_enable <= 0;
+			
+			//DEBUG
+			debug_reg[64] <= 0;
 		end
 		else begin 
+			//DEBUG
+			if (OPCODE_F==ADDI) debug_reg[64] <= 1;
+			
 			
 			//FETCH
 			if (OPCODE_E == BX) REGISTRADORES[1] <= REGISTRADORES[EXE_PIPE[2:0]];
